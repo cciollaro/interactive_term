@@ -5,12 +5,15 @@ module InteractiveTerm
 	class Term
 		attr_reader :width, :height, :screen
 
-		def initialize
-			@stty_state = @width = @height = @listener_thread = nil
+		def initialize(start_session = false)
+			@stty_state = @width = @height = @listener_thread = @session_active = nil
 			@listeners = []
+      @keypress_queue = Queue.new
 			@height, @width = IO.console.winsize
 
 			@screen = VirtualScreen.new(@width, @height)
+
+      self.start_session if start_session
 		end
 
 		def register_listener(&block)
@@ -18,6 +21,8 @@ module InteractiveTerm
 		end
 
 		def start_session
+			@session_active = true
+
 			# switch to a new terminal context
 			system('tput smcup')
 
@@ -39,21 +44,37 @@ module InteractiveTerm
 			@lisen_thread = Thread.new do
 				Thread.current.abort_on_exception = true
 				loop do
-					keypress = $stdin.getc
-					@listeners.each {|listener| listener.call(keypress)}
+					@keypress_queue.push $stdin.getc
 				end
 			end
 
-			@render_thread = Thread.new do
-				Thread.current.abort_on_exception = true
-				loop do
-					sleep 1.0/30
-					if @screen.need_redraw?
-						@screen.update!
-					end
-				end
+			trap("SIGINT") do 
+				self.end_session
 			end
 		end
+
+    def loop(&block)
+      while @session_active
+				# process up to 5 keypresses
+        begin
+					5.times do
+						keypress = @keypress_queue.pop(true) #nonblock
+						@listeners.each {|listener| listener.call(keypress)} if keypress
+					end
+        rescue ThreadError
+        end
+          
+        # run loop code
+        yield
+
+        # run render code
+				if @screen.need_redraw?
+					@screen.update!
+				end
+        
+				sleep 1.0/60
+      end
+    end
 
 		def end_session
 			#bring back the cursor
@@ -64,6 +85,8 @@ module InteractiveTerm
 			
 			#return to original terminal context
 			system('tput rmcup')
+
+      @session_active = false
 		end
 		
 		def debug!
@@ -76,8 +99,9 @@ module InteractiveTerm
 
 	class Bitmap
 		def self.iterate(bitmap, &block)
-			x = y = 0
+			y = 0
 			bitmap.each do |str|
+        x = 0
 				str.each_char do |char|
 					yield char, x, y
 					x += 1
@@ -95,14 +119,11 @@ module InteractiveTerm
 		# each string represents the next line.
 		# newlines in bitmap is undefined behavior.
 		def initialize(x, y, bitmap)
-			@x = x
-			@y = y
-			@bitmap = bitmap
+			@prev_x = @x = x
+			@prev_y = @y = y
+			@prev_bitmap = @bitmap = bitmap
 
-			@prev_x = nil
-			@prev_y = nil
-			@prev_bitmap = nil
-			#@state_mutex = Mutex.new
+      @needs_redraw = true
 		end
 
 		def x=(new_x)
@@ -132,9 +153,9 @@ module InteractiveTerm
 		def deltas
 			res = []
 			
-			# clear old sprite
+			# clearing spaces for old sprite
 			Bitmap.iterate(@prev_bitmap) do |b_char, b_x, b_y|
-				res << [" ", @x + b_x, @y + b_y]
+				res << [" ", @prev_x + b_x, @prev_y + b_y]
 			end
 
 			# draw new sprite
@@ -152,6 +173,11 @@ module InteractiveTerm
 		def needs_redraw?
 			@needs_redraw
 		end
+
+    def set_screen_dimensions(screen_width, screen_height)
+      @screen_width = screen_width
+      @screen_height = screen_height
+    end
 	end
 
 	class VirtualScreen
@@ -167,6 +193,7 @@ module InteractiveTerm
 		end
 
 		def add_sprite(sprite)
+      sprite.set_screen_dimensions(@width, @height)
 			@sprites << sprite
 		end
 	 
@@ -185,6 +212,8 @@ module InteractiveTerm
 	 
 		def draw(char, x, y)
 			raise "stop that" if char.length != 1
+      return if x < 1 || x > @width - 1
+      return if y < 1 || y > @height - 1
 			@draw_mutex.synchronize do
 				puts "\e[#{y};#{x}H#{char}"
 			end
@@ -194,6 +223,5 @@ module InteractiveTerm
 			@draw_mutex.unlock if @draw_mutex.locked?
 			#TODO: might want to do a full clean up of screen here
 		end
-
 	end
 end
