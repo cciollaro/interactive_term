@@ -1,4 +1,5 @@
-require './interactive_term'
+$LOAD_PATH.unshift("#{File.dirname(__FILE__)}/../lib")
+require 'interactive_term'
 
 class Paddle < InteractiveTerm::Sprite
   def initialize(x, y)
