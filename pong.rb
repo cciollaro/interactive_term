@@ -1,17 +1,17 @@
 require './interactive_term'
 
 class Paddle < InteractiveTerm::Sprite
-	def initialize(x, y)
+  def initialize(x, y)
     bitmap = [
-			"┏┓",
+      "┏┓",
       "┃┃",
       "┗┛"
-		]
+    ]
     super(x, y, bitmap)
 
     @height = 3
     @width = 2
-	end
+  end
  
   def up
     self.y -= 1
@@ -28,15 +28,15 @@ class Ball < InteractiveTerm::Sprite
   attr_reader :width, :height
   def initialize(x, y, *paddles)
     bitmap = [
-			"┏┓",
-			"┗┛"
-		]
+      "┏┓",
+      "┗┛"
+    ]
     @vel_x = 1
     @vel_y = 1
 
     @width = @height = 2
     
-		super(x, y, bitmap)
+    super(x, y, bitmap)
   end
 
   def step!
@@ -77,7 +77,7 @@ end
 
 # keeps looping until either @interactive_term.end_session, @interactive_term.break_loop is called, or ctrl+c is caught
 # in this program, this is the game loop
-@interactive_term.loop do	 
+@interactive_term.loop do  
   @ball.step!
 
   if @ball.x < 1 - @ball.width
