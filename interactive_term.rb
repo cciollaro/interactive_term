@@ -6,7 +6,7 @@ module InteractiveTerm
 		attr_reader :width, :height, :screen
 
 		def initialize(start_session = false)
-			@stty_state = @width = @height = @listener_thread = @session_active = nil
+			@stty_state = @width = @height = @listener_thread = @session_active = @loop_active = nil
 			@listeners = []
       @keypress_queue = Queue.new
 			@height, @width = IO.console.winsize
@@ -54,14 +54,16 @@ module InteractiveTerm
 		end
 
     def loop(&block)
-      while @session_active
-				# process up to 5 keypresses
+      @loop_active = true
+
+      while @loop_active 
+				# process up to 5 keypresses (should be fine because happens 60 times per second)
         begin
 					5.times do
 						keypress = @keypress_queue.pop(true) #nonblock
 						@listeners.each {|listener| listener.call(keypress)} if keypress
 					end
-        rescue ThreadError
+        rescue ThreadError # nothing to pop
         end
           
         # run loop code
@@ -76,7 +78,12 @@ module InteractiveTerm
       end
     end
 
+    def break_loop
+      @loop_active = false
+    end
+
 		def end_session
+      sleep 1
 			#bring back the cursor
 			puts "\e[?25h"
 			
@@ -87,6 +94,7 @@ module InteractiveTerm
 			system('tput rmcup')
 
       @session_active = false
+      @loop_active = false
 		end
 		
 		def debug!
@@ -129,7 +137,6 @@ module InteractiveTerm
 		def x=(new_x)
 			return if new_x == @x
 
-			@prev_x = @x
 			@x = new_x
 			@needs_redraw = true
 		end
@@ -137,7 +144,6 @@ module InteractiveTerm
 		def y=(new_y)
 			return if new_y == @y
 
-			@prev_y = @y
 			@y = new_y
 			@needs_redraw = true
 		end
@@ -167,6 +173,8 @@ module InteractiveTerm
 		end
 
 		def drawn!
+			@prev_x = @x
+			@prev_y = @y
 			@needs_redraw = false
 		end
 
@@ -211,7 +219,6 @@ module InteractiveTerm
 		end
 	 
 		def draw(char, x, y)
-			raise "stop that" if char.length != 1
       return if x < 1 || x > @width - 1
       return if y < 1 || y > @height - 1
 			@draw_mutex.synchronize do
