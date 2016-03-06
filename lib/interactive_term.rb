@@ -58,7 +58,7 @@ module InteractiveTerm
       @loop_active = true
 
       while @loop_active 
-        # process up to 5 keypresses (should be fine because happens 30 times per second)
+        # process up to 5 keypresses (should be fine because happens FPS times per second)
         begin
           5.times do
             keypress = @keypress_queue.pop(true) #nonblock
@@ -126,9 +126,9 @@ module InteractiveTerm
     # each string represents the next line.
     # newlines in bitmap is undefined behavior.
     def initialize(x, y, bitmap)
-      @prev_x = @x = x
-      @prev_y = @y = y
-      @prev_bitmap = @bitmap = bitmap
+      @x = x
+      @y = y
+      @bitmap = bitmap
     end
 
     def set_screen_dimensions(screen_width, screen_height)
@@ -187,7 +187,7 @@ module InteractiveTerm
     def initialize(width, height)
       @width = width
       @height = height
-      # There might be a reason to use an actual noop character
+      # There might be a reason to use an actual noop character instead of space
       @buffer = @height.times.map { @width.times.map {" "}}
     end
 
@@ -201,7 +201,6 @@ module InteractiveTerm
 
     # Inserts the given char at x, y of matrix
     # Return without doing anything if x y is out of bounds
-    # Assumes the matrix is a square
     def matrix_safe_insert(matrix, char, x, y)
       return if x < 0 || x >= matrix.first.size
       return if y < 0 || y >= matrix.size
